@@ -1,0 +1,54 @@
+#!/bin/bash
+#Set FCC Variables
+. /datastage/loc_master/scripts/env/lm.env
+FCC_WORKING_DIR="/data/datastage/FCC/"
+FCC_REL_DATE=$(date +"%Y%m%d")
+
+echo $FCC_REL_DATE
+# Change directory to working directory
+
+cd ${FCC_WORKING_DIR}
+
+FCC_FABRIC_FILE_PREFIX="FCC_Fabric_Verson_*.zip"
+
+#Get FCC REL date
+export PGPASSWORD=${DB_PASSWD}
+
+# Drop the table to load the InfoGroup data
+echo "DROP TABLE IF EXISTS import.fcc_active_addr_$FCC_REL_DATE "
+echo "DROP TABLE IF EXISTS import.fcc_secondary_addr_$FCC_REL_DATE "
+
+psql -h ${DB_HOST} -p ${DB_PORT} -U ${DB_USER} -d ${DB} -c  "DROP TABLE IF EXISTS import.fcc_active_addr_$FCC_REL_DATE "
+psql -h ${DB_HOST} -p ${DB_PORT} -U ${DB_USER} -d ${DB} -c  "DROP TABLE IF EXISTS import.fcc_secondary_addr_$FCC_REL_DATE "
+
+# Create the table to load the InfoGroup data
+echo "CREATE TABLE import.fcc_active_addr_$FCC_REL_DATE AS TABLE import.fcc_active_bsl WITH NO data"
+echo "CREATE TABLE import.fcc_secondary_addr_$FCC_REL_DATE AS TABLE import.fcc_secondary_rel WITH NO data"
+
+psql -h ${DB_HOST} -p ${DB_PORT} -U ${DB_USER} -d ${DB} -c  "CREATE TABLE import.fcc_active_addr_$FCC_REL_DATE AS TABLE import.fcc_active_bsl WITH NO data "
+psql -h ${DB_HOST} -p ${DB_PORT} -U ${DB_USER} -d ${DB} -c  "CREATE TABLE import.fcc_secondary_addr_$FCC_REL_DATE AS TABLE import.fcc_secondary_rel WITH NO data "
+
+echo $FCC_FABRIC_FILE_PREFIX
+
+echo "Loading ${FCC_FABRIC_FILE_PREFIX} file copy data into table..."
+
+FCC_ACTIVE_BSL_ZIP_FILE=$(unzip -Z1 $FCC_FABRIC_FILE_PREFIX | head -1)
+FCC_ACTIVE_NOBSL_ZIP_FILE=$(unzip -Z1 $FCC_FABRIC_FILE_PREFIX | head -2 | tail -1)
+FCC_SECONDARY_ZIP_FILE=$(unzip -Z1 $FCC_FABRIC_FILE_PREFIX | tail -1)
+
+echo "FCC Active BSL zip files name ${FCC_ACTIVE_BSL_ZIP_FILE}"
+echo "FCC Active NOBSL zip files name ${FCC_ACTIVE_NOBSL_ZIP_FILE}"
+echo "FCC Secondary BSL zip files name ${FCC_SECONDARY_ZIP_FILE}"
+
+cat "${FCC_ACTIVE_BSL_ZIP_FILE}" | psql -h ${DB_HOST} -p ${DB_PORT} -U ${DB_USER} -d ${DB} -c "copy import.fcc_active_addr_$FCC_REL_DATE from STDIN CSV HEADER "
+cat "${FCC_ACTIVE_NOBSL_ZIP_FILE}" | psql -h ${DB_HOST} -p ${DB_PORT} -U ${DB_USER} -d ${DB} -c "copy import.fcc_active_addr_$FCC_REL_DATE from STDIN CSV HEADER "
+cat "${FCC_SECONDARY_ZIP_FILE}" | psql -h ${DB_HOST} -p ${DB_PORT} -U ${DB_USER} -d ${DB} -c "copy import.fcc_secondary_addr_$FCC_REL_DATE from STDIN CSV HEADER "
+
+if [ $? -ne 0 ]
+ then
+    echo "Error loading file ${FCC_FABRIC_FILE_PREFIX} zip content."
+     exit 1
+fi
+
+echo "Finished loading FCC data.."
+exit 0
